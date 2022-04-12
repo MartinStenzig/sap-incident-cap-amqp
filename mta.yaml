@@ -1,0 +1,59 @@
+---
+_schema-version: '3.1'
+ID: sap-incident-cap-amqp
+version: 1.0.0
+description: "A simple CAP project."
+parameters:
+  enable-parallel-deployments: true
+build-parameters:
+  before-all:
+    - builder: custom
+      commands:
+        - npx -p @sap/cds-dk cds build --production
+
+modules:
+  - name: sap-incident-cap-amqp-srv
+    type: nodejs
+    path: gen/srv
+    parameters:
+      buildpack: nodejs_buildpack
+      memory: 256M
+      disk-quota: 512M
+    build-parameters:
+      builder: npm-ci
+    provides:
+      - name: srv-api # required by consumers of CAP services (e.g. approuter)
+        properties:
+          srv-url: ${default-url}
+    requires:
+      - name: sap-incident-cap-amqp-db
+      - name: sap-incident-cap-amqp-auth
+      - name: riz-inno-events
+
+  - name: sap-incident-cap-amqp-db-deployer
+    type: hdb
+    path: gen/db
+    parameters:
+      buildpack: nodejs_buildpack
+    requires:
+      - name: sap-incident-cap-amqp-db
+
+resources:
+  - name: sap-incident-cap-amqp-db
+    type: com.sap.xs.hdi-container
+    parameters:
+      service: hana # or 'hanatrial' on trial landscapes
+      service-plan: hdi-shared
+
+  - name: sap-incident-cap-amqp-auth
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: xsuaa
+      service-plan: application
+      path: ./xs-security.json
+      config:
+        xsappname: sap-incident-cap-amqp-${org}-${space}
+        tenant-mode: dedicated
+
+  - name: riz-inno-events # !!! Adjust
+    type: org.cloudfoundry.existing-service
